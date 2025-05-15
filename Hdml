@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #87CEEB;
+            font-family: Arial, sans-serif;
+        }
+        
+        .game-container {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            overflow: hidden;
+            background-color: #87CEEB;
+            border: 2px solid #000;
+            border-radius: 5px;
+        }
+        
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .start-menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+        
+        .start-menu h1 {
+            color: white;
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+        
+        .start-menu button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+        
+        .game-over h1 {
+            color: white;
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+        
+        .game-over p {
+            color: white;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        
+        .game-over button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .score {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-size: 24px;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div class="score">Score: <span id="score">0</span></div>
+        
+        <div class="start-menu" id="start-menu">
+            <h1>Flappy Game</h1>
+            <button id="start-button">Iniciar Jogo</button>
+        </div>
+        
+        <div class="game-over" id="game-over">
+            <h1>Game Over!</h1>
+            <p>Seu Score: <span id="final-score">0</span></p>
+            <button id="restart-button">Jogar Novamente</button>
+        </div>
+    </div>
+
+    <script>
+        // Variáveis do jogo
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const startMenu = document.getElementById('start-menu');
+        const gameOverMenu = document.getElementById('game-over');
+        const startButton = document.getElementById('start-button');
+        const restartButton = document.getElementById('restart-button');
+        const scoreElement = document.getElementById('score');
+        const finalScoreElement = document.getElementById('final-score');
+        
+        // Configurações do canvas
+        canvas.width = 400;
+        canvas.height = 600;
+        
+        // Estado do jogo
+        let gameRunning = false;
+        let score = 0;
+        let gravity = 0.5;
+        let speed = 2;
+        
+        // Pássaro
+        const bird = {
+            x: 50,
+            y: 300,
+            width: 40,
+            height: 30,
+            velocity: 0,
+            jump: -10,
+            color: '#FFFF00'
+        };
+        
+        // Canos
+        let pipes = [];
+        const pipeWidth = 60;
+        const pipeGap = 150;
+        const pipeMinHeight = 50;
+        const pipeSpawnRate = 120; // Frames entre novos canos
+        let frameCount = 0;
+        
+        // Event listeners
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', startGame);
+        document.addEventListener('keydown', handleJump);
+        document.addEventListener('touchstart', handleJump);
+        canvas.addEventListener('click', handleJump);
+        
+        // Função para iniciar/reiniciar o jogo
+        function startGame() {
+            bird.y = 300;
+            bird.velocity = 0;
+            pipes = [];
+            score = 0;
+            frameCount = 0;
+            scoreElement.textContent = score;
+            gameRunning = true;
+            startMenu.style.display = 'none';
+            gameOverMenu.style.display = 'none';
+            gameLoop();
+        }
+        
+        // Função para fazer o pássaro pular
+        function handleJump(e) {
+            if (gameRunning) {
+                bird.velocity = bird.jump;
+                // Evitar scroll da página nos dispositivos móveis
+                if (e.type === 'touchstart') {
+                    e.preventDefault();
+                }
+            }
+        }
+        
+        // Função para criar novos canos
+        function createPipe() {
+            const minHeight = pipeMinHeight;
+            const maxHeight = canvas.height - pipeGap - pipeMinHeight;
+            const height = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
+            
+            const pipe = {
+                x: canvas.width,
+                width: pipeWidth,
+                passed: false,
+                top: {
+                    y: 0,
+                    height: height,
+                    color: '#4CAF50'
+                },
+                bottom: {
+                    y: height + pipeGap,
+                    height: canvas.height - (height + pipeGap),
+                    color: '#4CAF50'
+                }
+            };
+            
+            pipes.push(pipe);
+        }
+        
+        // Verificar colisões
+        function checkCollision() {
+            // Colisão com o chão ou teto
+            if (bird.y <= 0 || bird.y + bird.height >= canvas.height) {
+                return true;
+            }
+            
+            // Colisão com os canos
+            for (let i = 0; i < pipes.length; i++) {
+                const pipe = pipes[i];
+                
+                // Verificar se o pássaro está na área de colisão em X
+                if (bird.x + bird.width > pipe.x && bird.x < pipe.x + pipe.width) {
+                    // Verificar colisão com o cano superior
+                    if (bird.y < pipe.top.height) {
+                        return true;
+                    }
+                    
+                    // Verificar colisão com o cano inferior
+                    if (bird.y + bird.height > pipe.bottom.y) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+        
+        // Atualizar estado do jogo
+        function update() {
+            if (!gameRunning) return;
+            
+            // Atualizar posição do pássaro
+            bird.velocity += gravity;
+            bird.y += bird.velocity;
+            
+            // Criar novos canos
+            frameCount++;
+            if (frameCount % pipeSpawnRate === 0) {
+                createPipe();
+            }
+            
+            // Mover canos e verificar pontuação
+            for (let i = 0; i < pipes.length; i++) {
+                pipes[i].x -= speed;
+                
+                // Adicionar pontuação quando o pássaro passa por um cano
+                if (!pipes[i].passed && pipes[i].x + pipes[i].width < bird.x) {
+                    pipes[i].passed = true;
+                    score++;
+                    scoreElement.textContent = score;
+                }
+            }
+            
+            // Remover canos que saíram da tela
+            if (pipes.length > 0 && pipes[0].x + pipes[0].width < 0) {
+                pipes.shift();
+            }
+            
+            // Verificar colisões
+            if (checkCollision()) {
+                gameOver();
+            }
+        }
+        
+        // Função de Game Over
+        function gameOver() {
+            gameRunning = false;
+            finalScoreElement.textContent = score;
+            gameOverMenu.style.display = 'flex';
+        }
+        
+        // Renderizar o jogo
+        function draw() {
+            // Limpar o canvas
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Desenhar o chão
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+            
+            // Desenhar o pássaro
+            ctx.fillStyle = bird.color;
+            ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
+            
+            // Desenhar olho do pássaro
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(bird.x + 30, bird.y + 10, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Desenhar asa do pássaro
+            ctx.fillStyle = '#FFA500';
+            ctx.fillRect(bird.x, bird.y + 15, 20, 5);
+            
+            // Desenhar os canos
+            for (let i = 0; i < pipes.length; i++) {
+                const pipe = pipes[i];
+                
+                // Cano superior
+                ctx.fillStyle = pipe.top.color;
+                ctx.fillRect(pipe.x, pipe.top.y, pipe.width, pipe.top.height);
+                
+                // Borda do cano superior
+                ctx.fillStyle = '#2E8B57';
+                ctx.fillRect(pipe.x - 2, pipe.top.height - 20, pipe.width + 4, 20);
+                
+                // Cano inferior
+                ctx.fillStyle = pipe.bottom.color;
+                ctx.fillRect(pipe.x, pipe.bottom.y, pipe.width, pipe.bottom.height);
+                
+                // Borda do cano inferior
+                ctx.fillStyle = '#2E8B57';
+                ctx.fillRect(pipe.x - 2, pipe.bottom.y, pipe.width + 4, 20);
+            }
+        }
+        
+        // Loop principal do jogo
+        function gameLoop() {
+            update();
+            draw();
+            
+            if (gameRunning) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Ajustar tamanho do canvas quando a janela é redimensionada
+        function resizeCanvas() {
+            const container = document.querySelector('.game-container');
+            const containerWidth = container.offsetWidth;
+            const containerHeight = container.offsetHeight;
+            
+            canvas.width = containerWidth;
+            canvas.height = containerHeight;
+        }
+        
+        // Inicializar o jogo
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+    </script>
+</body>
+</html>
